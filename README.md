@@ -1,5 +1,18 @@
 # FairLaunch
 
+[![CI](https://github.com/everpatrykkontakt-byte/fairlaunch/actions/workflows/ci.yml/badge.svg)](https://github.com/everpatrykkontakt-byte/fairlaunch/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)](https://nextjs.org)
+
+> **TL;DR** — Launch a community token where the dev holds **0%**, everyone
+> enters at one price via an atomic create+buy, and the creator-fee commission
+> is recycled into **buyback-and-burn**. Runs out of the box on a safe in-memory
+> mock; flip one env var for real Pump.fun (PumpPortal or the pump-sdk).
+>
+> ```bash
+> npm install && npm run dev   # http://localhost:3000 (seeded demo data)
+> ```
+
 **A fair-launch commitment layer for community token launches.** Communities
 form *before* a token exists. Backers claim slots; when every slot fills, the
 campaign's pool wallet executes one atomic create-and-buy — so every backer
