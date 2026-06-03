@@ -643,9 +643,70 @@ export async function processAutoBuybacks(): Promise<
   return ok({ ran, burnedRuns });
 }
 
+/** Update a campaign's buyback config (creator-only in real mode). */
+export async function updateBuybackConfig(
+  campaignId: string,
+  opts: { requesterWallet?: string; burnSharePct?: number; autoBuyback?: boolean },
+): Promise<Result<Campaign>> {
+  await ensureSeeded();
+  const { store, chain } = deps();
+
+  return store.withCampaignLock(campaignId, async () => {
+    const campaign = await store.getCampaign(campaignId);
+    if (!campaign) return err(appError("not_found", "campaign not found"));
+    if (chain.name !== "mock" && opts.requesterWallet !== campaign.creatorWallet) {
+      return err(appError("forbidden", "only the creator can change buyback config"));
+    }
+    if (
+      opts.burnSharePct !== undefined &&
+      (!Number.isInteger(opts.burnSharePct) || opts.burnSharePct < 0 || opts.burnSharePct > 100)
+    ) {
+      return err(appError("validation", "burnSharePct must be an integer 0–100"));
+    }
+
+    const updated = await store.updateCampaign({
+      ...campaign,
+      burnSharePct: opts.burnSharePct ?? campaign.burnSharePct,
+      autoBuyback: opts.autoBuyback ?? campaign.autoBuyback,
+    });
+    return ok(updated);
+  });
+}
+
 // --------------------------------------------------------------------------
 // Read models
 // --------------------------------------------------------------------------
+
+export interface GlobalStats {
+  totalLaunches: number;
+  byStatus: Record<string, number>;
+  totalBackedLamports: Lamports;
+  totalTokensBurned: bigint;
+  totalBuybackLamports: Lamports;
+}
+
+/** Aggregate protocol-wide stats for the dashboard. */
+export async function getGlobalStats(): Promise<GlobalStats> {
+  await ensureSeeded();
+  const campaigns = await getStore().listCampaigns();
+  const byStatus: Record<string, number> = {};
+  let totalBacked: Lamports = ZERO;
+  let totalBurned = 0n;
+  let totalBuyback: Lamports = ZERO;
+  for (const c of campaigns) {
+    byStatus[c.status] = (byStatus[c.status] ?? 0) + 1;
+    totalBacked = addL(totalBacked, c.totalBackedLamports);
+    totalBurned += c.tokensBurned;
+    totalBuyback = addL(totalBuyback, c.buybackLamports);
+  }
+  return {
+    totalLaunches: campaigns.length,
+    byStatus,
+    totalBackedLamports: totalBacked,
+    totalTokensBurned: totalBurned,
+    totalBuybackLamports: totalBuyback,
+  };
+}
 
 export async function getCampaignView(id: string): Promise<CampaignView | null> {
   await ensureSeeded();

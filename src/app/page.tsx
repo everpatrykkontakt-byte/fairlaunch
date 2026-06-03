@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, type CampaignDTO } from "@/lib/clientApi";
+import { api, type CampaignDTO, type MoneyDTO } from "@/lib/clientApi";
 import { CampaignCard } from "@/components/CampaignCard";
+import { formatTokens } from "@/lib/format";
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -42,11 +43,33 @@ function num2(c: CampaignDTO): number {
   return d ? new Date(d).getTime() : Number.MAX_SAFE_INTEGER;
 }
 
+function StatBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
+      <div className="text-xs uppercase tracking-wide text-[var(--color-muted)]">{label}</div>
+      <div className="mt-1 text-xl font-bold">{value}</div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const [campaigns, setCampaigns] = useState<CampaignDTO[]>([]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const [sort, setSort] = useState<SortKey>("newest");
+  const [query, setQuery] = useState("");
+  const [stats, setStats] = useState<{
+    totalLaunches: number;
+    live: number;
+    totalBacked: MoneyDTO;
+    totalTokensBurned: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.stats().then((res) => {
+      if (res.ok) setStats(res.data);
+    });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -89,9 +112,24 @@ export default function HomePage() {
         </div>
       </section>
 
+      {stats && (
+        <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatBox label="Launches" value={stats.totalLaunches.toString()} />
+          <StatBox label="Live now" value={stats.live.toString()} />
+          <StatBox label="Total backed" value={`${stats.totalBacked.sol} ◎`} />
+          <StatBox label="🔥 Burned" value={formatTokens(stats.totalTokensBurned)} />
+        </div>
+      )}
+
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Launches</h2>
         <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name or symbol…"
+            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-sm outline-none focus:border-[var(--color-brand)]"
+          />
           <div className="flex gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-1">
             {FILTERS.map((f) => (
               <button
@@ -139,7 +177,13 @@ export default function HomePage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sortCampaigns(campaigns, sort).map((c) => (
+          {sortCampaigns(
+            campaigns.filter((c) => {
+              const q = query.trim().toLowerCase();
+              return !q || c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q);
+            }),
+            sort,
+          ).map((c) => (
             <CampaignCard key={c.id} c={c} />
           ))}
         </div>

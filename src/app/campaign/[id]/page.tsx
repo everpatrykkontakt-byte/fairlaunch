@@ -6,7 +6,9 @@ import { api, type CampaignDTO } from "@/lib/clientApi";
 import { useWallet } from "@/components/WalletProvider";
 import { SlotGrid } from "@/components/SlotGrid";
 import { StatusBadge, Card, Stat } from "@/components/ui";
-import { shortAddr, timeLeft, relativeTime, formatTokens } from "@/lib/format";
+import { Countdown } from "@/components/Countdown";
+import { CopyButton } from "@/components/CopyButton";
+import { shortAddr, relativeTime, formatTokens } from "@/lib/format";
 
 type Msg = { tone: "ok" | "err"; text: string } | null;
 
@@ -18,6 +20,8 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg>(null);
   const [amount, setAmount] = useState("");
+  const [cfgBurn, setCfgBurn] = useState<number | null>(null);
+  const [cfgAuto, setCfgAuto] = useState<boolean | null>(null);
 
   const refresh = useCallback(async () => {
     const res = await api.getCampaign(id);
@@ -28,6 +32,14 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Sync the creator-settings drafts whenever the campaign loads/changes.
+  useEffect(() => {
+    if (c && cfgBurn === null) {
+      setCfgBurn(c.burnSharePct);
+      setCfgAuto(c.autoBuyback);
+    }
+  }, [c, cfgBurn]);
 
   if (loading) return <div className="py-20 text-center text-[var(--color-muted)]">Loading…</div>;
   if (!c)
@@ -141,6 +153,18 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
       await refresh();
     });
 
+  const onSaveConfig = () =>
+    guard(async () => {
+      const res = await api.updateConfig(id, {
+        requesterWallet: address ?? undefined,
+        burnSharePct: cfgBurn ?? undefined,
+        autoBuyback: cfgAuto ?? undefined,
+      });
+      if (res.ok) setMsg({ tone: "ok", text: "Buyback settings saved." });
+      else setMsg({ tone: "err", text: res.error.message });
+      await refresh();
+    });
+
   return (
     <div>
       <Link href="/" className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)]">
@@ -178,7 +202,7 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
             ) : (
               <Stat
                 label={c.status === "funded" ? "Launch window" : "Backing closes"}
-                value={timeLeft(c.status === "funded" ? c.launchDeadline : c.backingDeadline)}
+                value={<Countdown iso={c.status === "funded" ? c.launchDeadline : c.backingDeadline} />}
               />
             )}
           </div>
@@ -203,8 +227,9 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
           {c.status === "live" && <Tokenomics c={c} />}
 
           <div className="mt-6 space-y-1 text-xs text-[var(--color-muted)]">
-            <div>
+            <div className="flex items-center gap-2">
               Pool wallet: <span className="mono">{shortAddr(c.poolWallet, 6)}</span>
+              <CopyButton value={c.poolWallet} label="pool wallet" />
             </div>
             {c.mintAddress && (
               <div>
@@ -217,6 +242,7 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
                 >
                   {shortAddr(c.mintAddress, 6)}
                 </a>{" "}
+                <CopyButton value={c.mintAddress} label="mint" />{" "}
                 {c.launchedAt && <span>· launched {relativeTime(c.launchedAt)}</span>}
               </div>
             )}
@@ -339,6 +365,41 @@ export default function CampaignPage({ params }: { params: Promise<{ id: string 
             {(c.status === "failed" || c.status === "refunding") && (
               <div className="text-sm text-[var(--color-muted)]">
                 This launch didn&apos;t fill in time. All backers were refunded 100% — no fee.
+              </div>
+            )}
+
+            {isCreator && c.status !== "failed" && c.status !== "refunding" && (
+              <div className="mt-5 border-t border-[var(--color-border)] pt-4">
+                <div className="text-sm font-medium">Creator settings</div>
+                <div className="mt-3 flex items-center justify-between text-xs text-[var(--color-muted)]">
+                  <span>Burn share of commission</span>
+                  <span className="mono text-[var(--color-text)]">{cfgBurn ?? c.burnSharePct}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={cfgBurn ?? c.burnSharePct}
+                  onChange={(e) => setCfgBurn(Number(e.target.value))}
+                  className="mt-1 w-full accent-[var(--color-brand)]"
+                />
+                <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs text-[var(--color-muted)]">
+                  <input
+                    type="checkbox"
+                    checked={cfgAuto ?? c.autoBuyback}
+                    onChange={(e) => setCfgAuto(e.target.checked)}
+                    className="h-4 w-4 accent-[var(--color-brand)]"
+                  />
+                  Auto buyback &amp; burn (cron)
+                </label>
+                <button
+                  onClick={onSaveConfig}
+                  disabled={busy}
+                  className="mt-3 w-full rounded-xl border border-[var(--color-border)] py-2 text-sm hover:border-[var(--color-brand)]/50 disabled:opacity-50"
+                >
+                  {busy ? "Saving…" : "Save settings"}
+                </button>
               </div>
             )}
           </Card>

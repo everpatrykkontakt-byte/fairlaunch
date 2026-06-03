@@ -65,6 +65,23 @@ export const api = {
     call<{ wallet: string; backings: (BackingDTO & { campaign: CampaignDTO | null })[] }>(
       `/api/wallet/${address}`,
     ),
+  stats: () =>
+    call<{
+      totalLaunches: number;
+      live: number;
+      backing: number;
+      totalBacked: MoneyDTO;
+      totalBuyback: MoneyDTO;
+      totalTokensBurned: string;
+    }>("/api/stats"),
+  updateConfig: (
+    id: string,
+    body: { requesterWallet?: string; burnSharePct?: number; autoBuyback?: boolean },
+  ) =>
+    call<CampaignDTO>(`/api/campaigns/${id}/config`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   leaderboard: () =>
     call<{
       campaigns: { id: string; name: string; symbol: string; mintAddress: string | null; totalBacked: MoneyDTO; backers: number }[];
